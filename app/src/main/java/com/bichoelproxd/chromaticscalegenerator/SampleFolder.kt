@@ -57,12 +57,17 @@ class SampleFolder(private val context: Context, treeUri: Uri) {
         }
     }
 
-    private fun writeFile(directory: DocumentFile, name: String, source: File) {
+    /** Copia un archivo .dwp a la carpeta elegida, reemplazando el que ya exista con ese nombre. */
+    fun copyDwpFrom(source: File) {
+        writeFile(tree, source.name, source, "application/octet-stream")
+    }
+
+    private fun writeFile(directory: DocumentFile, name: String, source: File, mime: String = "audio/x-wav") {
         val existing = directory.findFile(name)
         val destination = if (existing != null && existing.isFile) {
             existing
         } else {
-            directory.createFile("audio/x-wav", name) ?: throw IOException("cannot create $name")
+            directory.createFile(mime, name) ?: throw IOException("cannot create $name")
         }
         // "wt" vacia el archivo existente antes de escribir.
         context.contentResolver.openOutputStream(destination.uri, "wt")?.use { output ->

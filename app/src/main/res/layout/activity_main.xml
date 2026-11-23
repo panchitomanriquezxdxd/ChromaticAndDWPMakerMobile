@@ -143,12 +143,91 @@
             android:checked="true"
             android:text="@string/dump_samples" />
 
+        <CheckBox
+            android:id="@+id/trimCheck"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:checked="true"
+            android:text="@string/auto_trim" />
+
+        <CheckBox
+            android:id="@+id/normalizeCheck"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="@string/normalize_volume" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/chromGenerate"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="@string/generate" />
+
+        <!-- Programa de DirectWave (.dwp) -->
+        <TextView
+            android:id="@+id/dwpTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/dwp_section"
+            android:textColor="@android:color/black"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/dwp_hint"
+            android:textColor="#777777"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/dwpNameText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/dwp_name"
+            android:textColor="@android:color/black" />
+
+        <EditText
+            android:id="@+id/dwpNameInput"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLength="40"
+            android:text="Program"
+            tools:ignore="HardcodedText,LabelFor" />
+
+        <TextView
+            android:id="@+id/dwpQualityText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/dwp_quality"
+            android:textColor="@android:color/black" />
+
+        <Spinner
+            android:id="@+id/dwpQualityChoice"
+            android:layout_width="match_parent"
+            android:layout_height="48dp" />
+
+        <CheckBox
+            android:id="@+id/dwpLoopCheck"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="@string/dwp_auto_loop" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/dwpCreate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/dwp_create" />
 
         <ProgressBar
             android:id="@+id/progressBar"

@@ -30,4 +30,22 @@
     <string name="error_bad_gap">Sample gap must be a number of seconds (0 or more).</string>
     <string name="error_no_samples">No samples found. The folder needs files named 1.wav, 2.wav, …</string>
     <string name="error_folder_access">Cannot access the selected folder. Select it again.</string>
+    <string name="auto_trim">Auto-trim silences at the start and end of each sample</string>
+    <string name="normalize_volume">Normalize volume (same level for every sample)</string>
+    <string name="dwp_section">DirectWave program (.dwp)</string>
+    <string name="dwp_hint">Turns the samples (1.wav, 2.wav, …) into a DirectWave program: one region per sample, starting at C5 and going up one semitone each. Uses the options above (auto-trim and normalize).</string>
+    <string name="dwp_name">Program name:</string>
+    <string name="dwp_quality">Audio quality:</string>
+    <string name="dwp_auto_loop">Automatic loop with crossfade on sustained sounds</string>
+    <string name="dwp_create">Create DWP</string>
+    <string name="status_dwp_working">Creating DWP… %1$d / %2$d</string>
+    <string name="status_dwp_done">Done. %1$s was saved in the selected folder (%2$d regions, %3$d with loop).</string>
+    <string name="error_too_many_samples">There are %1$d samples; a DWP holds at most %2$d (one region per key).</string>
+    <string name="status_preparing">Trimming and normalizing the samples…</string>
+    <string-array name="dwp_quality_options">
+        <item>High · 32-bit loops (double size)</item>
+        <item>Standard · 16 bit, original sample rate</item>
+        <item>Light · half the sample rate</item>
+        <item>Minimal · a quarter of the sample rate</item>
+    </string-array>
 </resources>

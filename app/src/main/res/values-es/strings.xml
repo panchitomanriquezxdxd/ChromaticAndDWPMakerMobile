@@ -28,4 +28,22 @@
     <string name="error_bad_gap">La separación debe ser un número de segundos (0 o más).</string>
     <string name="error_no_samples">No se encontraron muestras. La carpeta necesita archivos llamados 1.wav, 2.wav, …</string>
     <string name="error_folder_access">No se puede acceder a la carpeta seleccionada. Selecciónala de nuevo.</string>
+    <string name="auto_trim">Recortar silencios al inicio y al final de cada muestra</string>
+    <string name="normalize_volume">Normalizar el volumen (mismo nivel en todas las muestras)</string>
+    <string name="dwp_section">Programa de DirectWave (.dwp)</string>
+    <string name="dwp_hint">Convierte las muestras (1.wav, 2.wav, …) en un programa de DirectWave: una región por muestra, desde C5 y subiendo un semitono cada una. Usa las opciones de arriba (recorte y normalización).</string>
+    <string name="dwp_name">Nombre del programa:</string>
+    <string name="dwp_quality">Calidad del audio:</string>
+    <string name="dwp_auto_loop">Loop automático con crossfade en los sonidos que se sostienen</string>
+    <string name="dwp_create">Crear DWP</string>
+    <string name="status_dwp_working">Creando DWP… %1$d / %2$d</string>
+    <string name="status_dwp_done">Listo. %1$s se guardó en la carpeta seleccionada (%2$d regiones, %3$d con loop).</string>
+    <string name="error_too_many_samples">Hay %1$d muestras; un DWP admite como máximo %2$d (una región por tecla).</string>
+    <string name="status_preparing">Recortando y normalizando las muestras…</string>
+    <string-array name="dwp_quality_options">
+        <item>Alta · loops a 32 bit (pesa el doble)</item>
+        <item>Estándar · 16 bit, frecuencia original</item>
+        <item>Liviana · mitad de la frecuencia de muestreo</item>
+        <item>Mínima · cuarta parte de la frecuencia</item>
+    </string-array>
 </resources>

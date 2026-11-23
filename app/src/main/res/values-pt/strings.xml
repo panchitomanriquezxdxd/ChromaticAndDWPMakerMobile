@@ -28,4 +28,22 @@
     <string name="error_bad_gap">A pausa deve ser um número de segundos (0 ou mais).</string>
     <string name="error_no_samples">Nenhuma amostra encontrada. A pasta precisa de ficheiros chamados 1.wav, 2.wav, …</string>
     <string name="error_folder_access">Não é possível aceder à pasta selecionada. Selecione-a novamente.</string>
+    <string name="auto_trim">Cortar os silêncios no início e no fim de cada amostra</string>
+    <string name="normalize_volume">Normalizar o volume (mesmo nível em todas as amostras)</string>
+    <string name="dwp_section">Programa do DirectWave (.dwp)</string>
+    <string name="dwp_hint">Converte as amostras (1.wav, 2.wav, …) num programa do DirectWave: uma região por amostra, a partir de C5 e a subir um meio-tom de cada vez. Usa as opções acima (corte e normalização).</string>
+    <string name="dwp_name">Nome do programa:</string>
+    <string name="dwp_quality">Qualidade do áudio:</string>
+    <string name="dwp_auto_loop">Loop automático com crossfade nos sons sustentados</string>
+    <string name="dwp_create">Criar DWP</string>
+    <string name="status_dwp_working">A criar o DWP… %1$d / %2$d</string>
+    <string name="status_dwp_done">Concluído. %1$s foi guardado na pasta selecionada (%2$d regiões, %3$d com loop).</string>
+    <string name="error_too_many_samples">Há %1$d amostras; um DWP admite no máximo %2$d (uma região por tecla).</string>
+    <string name="status_preparing">A cortar e a normalizar as amostras…</string>
+    <string-array name="dwp_quality_options">
+        <item>Alta · loops a 32 bit (pesa o dobro)</item>
+        <item>Padrão · 16 bit, frequência original</item>
+        <item>Leve · metade da frequência de amostragem</item>
+        <item>Mínima · um quarto da frequência</item>
+    </string-array>
 </resources>

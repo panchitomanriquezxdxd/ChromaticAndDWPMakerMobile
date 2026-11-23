@@ -6,6 +6,19 @@ Generates a chromatic scale from numbered samples (`1.wav`, `2.wav`, …), like 
 **Languages:** English, Español, Português (Portugal) and Português (Brasil). The app asks for the language the
 first time it opens, and the **Language** button at the top lets you change it at any time.
 
+## Features
+
+- **Auto-trim**: removes the silence at the start and end of every sample (anything below −45 dB relative to the
+  sample's peak, keeping a 5 ms margin) so notes play without delay. Silences inside a sample are left alone.
+- **Volume normalization**: every sample ends up with the same RMS level (the loudest common level that keeps all of
+  them below clipping, at most −18 dBFS), so no vowel sounds louder or quieter than another.
+- **DWP maker**: creates a DirectWave program (`.dwp`) from `1.wav`, `2.wav`, … using the same logic as
+  `DWP Converter.html`: one region per sample from C5 upward (one semitone each, up to 128 regions), optional automatic
+  loop with crossfade on sustained sounds, and four quality levels. It does not need Praat. The `.dwp` is saved in the
+  chosen folder. The core (`DwpBuilder.kt`) was checked byte for byte against the HTML's JavaScript.
+
+Auto-trim and normalization apply both to the chromatic scale and to the DWP.
+
 ## How the port works
 
 | PC | Android |

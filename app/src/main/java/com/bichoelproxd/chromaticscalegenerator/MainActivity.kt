@@ -55,8 +55,14 @@ class MainActivity : AppCompatActivity() {
             showLanguageDialog(cancelable = false)
         }
 
+        binding.dwpQualityChoice.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item, resources.getStringArray(R.array.dwp_quality_options)
+        )
+        binding.dwpQualityChoice.setSelection(1) // Estandar
+
         binding.dirPicker.setOnClickListener { pickFolder.launch(treeUri) }
         binding.chromGenerate.setOnClickListener { generate() }
+        binding.dwpCreate.setOnClickListener { createDwp() }
         binding.pitchedCheck.setOnCheckedChangeListener { _, checked ->
             // Igual que en PC: las muestras con tono solo se guardan si "Pitched" esta activado.
             binding.samplesCheck.isEnabled = checked
@@ -125,6 +131,7 @@ class MainActivity : AppCompatActivity() {
     private fun setBusy(value: Boolean) {
         busy = value
         binding.chromGenerate.isEnabled = !value
+        binding.dwpCreate.isEnabled = !value
         binding.dirPicker.isEnabled = !value
         binding.languageButton.isEnabled = !value
         binding.progressBar.visibility = if (value) View.VISIBLE else View.INVISIBLE
@@ -162,6 +169,9 @@ class MainActivity : AppCompatActivity() {
             dumpSamples = binding.samplesCheck.isChecked && binding.pitchedCheck.isChecked,
         )
 
+        val trimmed = binding.trimCheck.isChecked
+        val normalized = binding.normalizeCheck.isChecked
+
         setBusy(true)
         setStatus(getString(R.string.status_copying))
 
@@ -182,6 +192,11 @@ class MainActivity : AppCompatActivity() {
                     throw IllegalStateException(getString(R.string.error_no_samples))
                 }
 
+                if (trimmed || normalized) {
+                    runOnUiThread { setStatus(getString(R.string.status_preparing)) }
+                    AudioPrep.prepareFolder(sampleDir, trimmed, normalized)
+                }
+
                 ChromaticGenerator.generate(applicationContext, params, sampleDir, outputDir) { done, total ->
                     runOnUiThread {
                         if (total > 0) {
@@ -199,6 +214,96 @@ class MainActivity : AppCompatActivity() {
                 val doneText = if (params.dumpSamples) R.string.status_done_pitched else R.string.status_done
                 runOnUiThread {
                     setStatus(getString(doneText))
+                    setBusy(false)
+                }
+            } catch (e: Throwable) {
+                val message = e.message ?: e.toString()
+                runOnUiThread {
+                    setStatus(getString(R.string.error_prefix, message))
+                    setBusy(false)
+                }
+            } finally {
+                workRoot.deleteRecursively()
+            }
+        }
+    }
+
+    /**
+     * Crea un programa de DirectWave (.dwp) con las muestras 1.wav, 2.wav, ... (misma logica que
+     * "DWP Converter.html"): una region por muestra, empezando en C5. No usa Praat.
+     */
+    private fun createDwp() {
+        if (busy) return
+        val uri = treeUri
+        if (uri == null) {
+            setStatus(getString(R.string.error_no_folder))
+            return
+        }
+        val trimmed = binding.trimCheck.isChecked
+        val normalized = binding.normalizeCheck.isChecked
+        val programName = binding.dwpNameInput.text.toString()
+        val loop = binding.dwpLoopCheck.isChecked
+        val quality = binding.dwpQualityChoice.selectedItemPosition
+        val options = DwpBuilder.Options(
+            loop = loop,
+            rateDiv = when (quality) { 2 -> 2; 3 -> 4; else -> 1 },
+            loopBits32 = quality == 0,
+            keepLevels = normalized,
+        )
+
+        setBusy(true)
+        setStatus(getString(R.string.status_copying))
+
+        // El armado del DWP es Kotlin puro, pero se hace en un hilo con pila grande por la misma
+        // razon que Praat (arreglos grandes y bucles de correlacion).
+        praatThread("dwp-create") {
+            val workRoot = File(cacheDir, "work")
+            try {
+                val folder = SampleFolder(applicationContext, uri)
+                if (!folder.canAccess()) {
+                    throw IllegalStateException(getString(R.string.error_folder_access))
+                }
+                val sampleDir = File(workRoot, "samples")
+                val outputDir = File(workRoot, "output")
+                outputDir.deleteRecursively()
+                outputDir.mkdirs()
+
+                if (folder.copySamplesTo(sampleDir) == 0) {
+                    throw IllegalStateException(getString(R.string.error_no_samples))
+                }
+                val files = AudioPrep.listNumbered(sampleDir)
+                if (files.isEmpty()) {
+                    throw IllegalStateException(getString(R.string.error_no_samples))
+                }
+                if (files.size > DwpBuilder.MAX_REGIONS) {
+                    throw IllegalStateException(
+                        getString(R.string.error_too_many_samples, files.size, DwpBuilder.MAX_REGIONS)
+                    )
+                }
+
+                runOnUiThread { setStatus(getString(R.string.status_preparing)) }
+                val samples = AudioPrep.prepare(files.map { AudioPrep.readWav(it) }, trimmed, normalized)
+
+                val template = DwpTemplateLoader.load(applicationContext)
+                val target = File(outputDir, DwpBuilder.cleanName(programName) + ".dwp")
+                val result = target.outputStream().buffered().use { out ->
+                    DwpBuilder.build(samples, programName, template, out, options) { done, total ->
+                        runOnUiThread {
+                            binding.progressBar.isIndeterminate = false
+                            binding.progressBar.max = total
+                            binding.progressBar.progress = done
+                            setStatus(getString(R.string.status_dwp_working, done, total))
+                        }
+                    }
+                }
+
+                runOnUiThread { setStatus(getString(R.string.status_saving)) }
+                folder.copyDwpFrom(target)
+
+                runOnUiThread {
+                    setStatus(
+                        getString(R.string.status_dwp_done, target.name, result.regions.size, result.loops)
+                    )
                     setBusy(false)
                 }
             } catch (e: Throwable) {
