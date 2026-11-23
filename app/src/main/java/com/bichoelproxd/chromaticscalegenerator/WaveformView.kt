@@ -75,7 +75,7 @@ class WaveformView @JvmOverloads constructor(
                 var hi = Double.NEGATIVE_INFINITY
                 var lo = Double.POSITIVE_INFINITY
                 for (i in 0 until k) {
-                    val v = x[min(a.frames - 1, (c * fpc + i * fpc / k).toInt())]
+                    val v = x[min(a.frames - 1, (c * fpc + i * fpc / k).toInt())].toDouble()
                     if (v > hi) hi = v
                     if (v < lo) lo = v
                 }
