@@ -76,4 +76,5 @@
         <item>Normal</item>
         <item>Poco sensible (solo golpes fuertes)</item>
     </string-array>
+    <string name="error_out_of_memory">Al dispositivo se le acabó la memoria con este audio. Usa un archivo más corto o de menor calidad, o quítalo y usa la carpeta de muestras.</string>
 </resources>

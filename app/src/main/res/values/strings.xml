@@ -78,4 +78,5 @@
         <item>Normal</item>
         <item>Low (only loud hits)</item>
     </string-array>
+    <string name="error_out_of_memory">The device ran out of memory with this audio. Use a shorter or lower-quality file, or remove it and use the sample folder.</string>
 </resources>

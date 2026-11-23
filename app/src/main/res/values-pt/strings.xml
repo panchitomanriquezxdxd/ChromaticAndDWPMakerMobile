@@ -76,4 +76,5 @@
         <item>Normal</item>
         <item>Pouco sensível (só pancadas fortes)</item>
     </string-array>
+    <string name="error_out_of_memory">O dispositivo ficou sem memória com este áudio. Usa um ficheiro mais curto ou de menor qualidade, ou remove-o e usa a pasta de amostras.</string>
 </resources>

@@ -195,14 +195,7 @@ class MainActivity : AppCompatActivity() {
         val name = DocumentFile.fromSingleUri(this, uri)?.name ?: uri.lastPathSegment ?: "audio.wav"
         praatThread("slicex-load") {
             try {
-                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: throw IllegalStateException(getString(R.string.error_slicex_read))
-                if (bytes.size > MAX_AUDIO_BYTES) throw IllegalStateException(getString(R.string.error_file_too_big))
-                val wav = try {
-                    AudioPrep.parseWavWithMarkers(bytes)
-                } catch (_: IllegalArgumentException) {
-                    throw IllegalStateException(getString(R.string.error_slicex_read))
-                }
+                val wav = readWavFile(uri)
                 val st = SlicexState(name, wav.audio, wav.markers, wav.markers)
                 runOnUiThread {
                     slicex = st
@@ -216,9 +209,21 @@ class MainActivity : AppCompatActivity() {
                     setStatus(getString(R.string.status_ready))
                 }
             } catch (e: Throwable) {
-                val message = e.message ?: e.toString()
+                val message = errorText(e)
                 runOnUiThread { setStatus(getString(R.string.error_prefix, message)) }
             }
+        }
+    }
+
+    /** Lee y decodifica el WAV; los bytes crudos quedan libres apenas termina (el heap de Android es chico). */
+    private fun readWavFile(uri: Uri): AudioPrep.WavData {
+        val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: throw IllegalStateException(getString(R.string.error_slicex_read))
+        if (bytes.size > MAX_AUDIO_BYTES) throw IllegalStateException(getString(R.string.error_file_too_big))
+        return try {
+            AudioPrep.parseWavWithMarkers(bytes)
+        } catch (_: IllegalArgumentException) {
+            throw IllegalStateException(getString(R.string.error_slicex_read))
         }
     }
 
@@ -305,20 +310,24 @@ class MainActivity : AppCompatActivity() {
         setSlicexMarkers(Slicex.shift(st.markers, delta, st.audio.frames))
     }
 
-    /** Regiones del audio cargado (una muestra por region), o null si se usan los 1.wav, 2.wav... */
-    private fun slicexSlices(): List<Audio>? {
+    /** Regiones del audio cargado (de a una), o null si se usan los 1.wav, 2.wav... */
+    private fun slicexSource(): AudioPrep.Source? {
         val st = slicex ?: return null
-        return Slicex.slices(st.audio, st.markers, st.includeIntro)
+        return Slicex.source(st.audio, st.markers, st.includeIntro)
     }
 
-    /** Deja las muestras en [sampleDir]: las regiones del audio cargado o la copia de la carpeta. */
-    private fun stageSamples(folder: SampleFolder, sampleDir: File, slices: List<Audio>?): Int {
-        if (slices == null) return folder.copySamplesTo(sampleDir)
+    /** Deja las muestras en [sampleDir]: las regiones del audio cargado (una a una) o la copia de la carpeta. */
+    private fun stageSamples(folder: SampleFolder, sampleDir: File, source: AudioPrep.Source?): Int {
+        if (source == null) return folder.copySamplesTo(sampleDir)
         sampleDir.deleteRecursively()
         sampleDir.mkdirs()
-        slices.forEachIndexed { i, a -> AudioPrep.writeWav(File(sampleDir, "${i + 1}.wav"), a) }
-        return slices.size
+        for (i in 0 until source.count) AudioPrep.writeWav(File(sampleDir, "${i + 1}.wav"), source.load(i))
+        return source.count
     }
+
+    /** Texto de un error; la falta de memoria se explica en lugar de mostrar el mensaje tecnico. */
+    private fun errorText(e: Throwable): String =
+        if (e is OutOfMemoryError) getString(R.string.error_out_of_memory) else (e.message ?: e.toString())
 
     private fun generate() {
         if (busy) return
@@ -351,7 +360,7 @@ class MainActivity : AppCompatActivity() {
 
         val trimmed = binding.trimCheck.isChecked
         val normalized = binding.normalizeCheck.isChecked
-        val slices = try { slicexSlices() } catch (e: IllegalArgumentException) { setStatus(getString(R.string.error_prefix, e.message ?: "")); return }
+        val slices = try { slicexSource() } catch (e: IllegalArgumentException) { setStatus(getString(R.string.error_prefix, e.message ?: "")); return }
 
         setBusy(true)
         setStatus(getString(R.string.status_copying))
@@ -398,7 +407,7 @@ class MainActivity : AppCompatActivity() {
                     setBusy(false)
                 }
             } catch (e: Throwable) {
-                val message = e.message ?: e.toString()
+                val message = errorText(e)
                 runOnUiThread {
                     setStatus(getString(R.string.error_prefix, message))
                     setBusy(false)
@@ -431,7 +440,7 @@ class MainActivity : AppCompatActivity() {
             loopBits32 = quality == 0,
             keepLevels = normalized,
         )
-        val slices = try { slicexSlices() } catch (e: IllegalArgumentException) { setStatus(getString(R.string.error_prefix, e.message ?: "")); return }
+        val slices = try { slicexSource() } catch (e: IllegalArgumentException) { setStatus(getString(R.string.error_prefix, e.message ?: "")); return }
 
         setBusy(true)
         setStatus(getString(R.string.status_copying))
@@ -450,26 +459,33 @@ class MainActivity : AppCompatActivity() {
                 outputDir.deleteRecursively()
                 outputDir.mkdirs()
 
-                if (stageSamples(folder, sampleDir, slices) == 0) {
-                    throw IllegalStateException(getString(R.string.error_no_samples))
+                val source: AudioPrep.Source = if (slices != null) {
+                    slices
+                } else {
+                    if (folder.copySamplesTo(sampleDir) == 0) {
+                        throw IllegalStateException(getString(R.string.error_no_samples))
+                    }
+                    val files = AudioPrep.listNumbered(sampleDir)
+                    if (files.isEmpty()) {
+                        throw IllegalStateException(getString(R.string.error_no_samples))
+                    }
+                    AudioPrep.fileSource(files)
                 }
-                val files = AudioPrep.listNumbered(sampleDir)
-                if (files.isEmpty()) {
-                    throw IllegalStateException(getString(R.string.error_no_samples))
-                }
-                if (files.size > DwpBuilder.MAX_REGIONS) {
+                if (source.count > DwpBuilder.MAX_REGIONS) {
                     throw IllegalStateException(
-                        getString(R.string.error_too_many_samples, files.size, DwpBuilder.MAX_REGIONS)
+                        getString(R.string.error_too_many_samples, source.count, DwpBuilder.MAX_REGIONS)
                     )
                 }
 
+                // Se mide el volumen de todas las muestras y despues se arma cada region de a una:
+                // nunca hay mas de una muestra en memoria.
                 runOnUiThread { setStatus(getString(R.string.status_preparing)) }
-                val samples = AudioPrep.prepare(files.map { AudioPrep.readWav(it) }, trimmed, normalized)
+                val prepared = AudioPrep.prepare(source, trimmed, normalized)
 
                 val template = DwpTemplateLoader.load(applicationContext)
                 val target = File(outputDir, DwpBuilder.cleanName(programName) + ".dwp")
                 val result = target.outputStream().buffered().use { out ->
-                    DwpBuilder.build(samples, programName, template, out, options) { done, total ->
+                    DwpBuilder.build(prepared.count, prepared::get, programName, template, out, options, cacheDir) { done, total ->
                         runOnUiThread {
                             binding.progressBar.isIndeterminate = false
                             binding.progressBar.max = total
@@ -489,7 +505,7 @@ class MainActivity : AppCompatActivity() {
                     setBusy(false)
                 }
             } catch (e: Throwable) {
-                val message = e.message ?: e.toString()
+                val message = errorText(e)
                 runOnUiThread {
                     setStatus(getString(R.string.error_prefix, message))
                     setBusy(false)

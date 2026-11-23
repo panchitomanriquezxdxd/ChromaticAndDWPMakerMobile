@@ -76,4 +76,5 @@
         <item>Normal</item>
         <item>Pouco sensível (só batidas fortes)</item>
     </string-array>
+    <string name="error_out_of_memory">O dispositivo ficou sem memória com este áudio. Use um arquivo mais curto ou de menor qualidade, ou remova-o e use a pasta de amostras.</string>
 </resources>

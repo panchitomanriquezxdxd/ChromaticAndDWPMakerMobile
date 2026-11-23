@@ -37,7 +37,7 @@ object Slicex {
             var m = 0.0
             var i = k * w
             while (i < (k + 1) * w) {
-                for (c in 0 until chs) { val v = abs(a.channels[c][i]); if (v > m) m = v }
+                for (c in 0 until chs) { val v = abs(a.channels[c][i]).toDouble(); if (v > m) m = v }
                 i += step
             }
             env[k] = m
@@ -82,7 +82,7 @@ object Slicex {
         var bv = Double.POSITIVE_INFINITY
         for (i in max(0, at - r)..min(a.frames - 1, at + r)) {
             var v = 0.0
-            for (c in 0 until min(2, a.channels.size)) v += abs(a.channels[c][i])
+            for (c in 0 until min(2, a.channels.size)) v += abs(a.channels[c][i]).toDouble()
             if (v < bv) { bv = v; best = i }
         }
         return best
@@ -118,13 +118,14 @@ object Slicex {
     /** Frames de audio anterior al primer marker (se ignora salvo que se incluya). */
     fun introFrames(markers: List<Int>): Int = if (markers.isNotEmpty() && markers[0] > 0) markers[0] else 0
 
-    /** Parte el audio en una muestra por region. */
-    fun slices(a: Audio, markers: List<Int>, includeIntro: Boolean): List<Audio> {
+    /** Una muestra por region, cargadas de a una (cada [AudioPrep.Source.load] copia solo esa region). */
+    fun source(a: Audio, markers: List<Int>, includeIntro: Boolean): AudioPrep.Source {
         val b = bounds(markers, includeIntro)
         if (b.size > DwpBuilder.MAX_REGIONS) {
             throw IllegalArgumentException("${b.size} markers; the maximum is ${DwpBuilder.MAX_REGIONS} (one region per key)")
         }
-        return b.mapIndexed { k, start ->
+        return AudioPrep.Source(b.size) { k ->
+            val start = b[k]
             val end = if (k + 1 < b.size) b[k + 1] else a.frames
             Audio(a.rate, Array(a.channels.size) { c -> a.channels[c].copyOfRange(start, end) })
         }

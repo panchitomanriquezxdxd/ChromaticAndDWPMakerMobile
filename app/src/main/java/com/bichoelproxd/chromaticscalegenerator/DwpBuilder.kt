@@ -1,5 +1,6 @@
 package com.bichoelproxd.chromaticscalegenerator
 
+import java.io.File
 import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -232,10 +233,20 @@ object DwpBuilder {
 
     // ------------------------------------------------------- construccion
 
-    /**
-     * Arma el .dwp con una region por muestra y lo escribe en [out]. Las muestras ya deben venir
-     * recortadas y/o normalizadas (ver [AudioPrep.prepare]).
-     */
+    /** Convierte una muestra a enteros de 16 bit (escala del HTML), ya con decimacion y normalizacion al pico. */
+    private fun toInts(audio: Audio, div: Int, keepLevels: Boolean): Array<DoubleArray> {
+        val same = audio.channels.size < 2
+        var vals = Array(if (same) 1 else 2) { c -> DoubleArray(audio.frames) { audio.channels[c][it] * 32768.0 } }
+        if (div > 1) vals = Array(vals.size) { decimate(vals[it], div) }
+        val T = vals[0].size
+        var peak = 0.0
+        for (c in vals.indices) for (i in 0 until T) { val a = abs(vals[c][i]); if (a > peak) peak = a }
+        if (peak < 1) peak = 1.0
+        val g = if (keepLevels) 1.0 else 32767.0 / peak
+        return Array(vals.size) { c -> DoubleArray(T) { Math.rint(vals[c][it] * g) } }
+    }
+
+    /** Version con la lista completa de muestras en memoria (para pruebas). */
     fun build(
         samples: List<Audio>,
         programName: String,
@@ -243,112 +254,124 @@ object DwpBuilder {
         out: OutputStream,
         opts: Options = Options(),
         onProgress: ((Int, Int) -> Unit)? = null,
+    ): Result = build(samples.size, { samples[it] }, programName, tpl, out, opts, null, onProgress)
+
+    /**
+     * Arma el .dwp con una region por muestra y lo escribe en [out]. [sample] entrega cada muestra
+     * (ya recortada y/o normalizada, ver [AudioPrep.prepare]) y se pide de a una; las regiones se
+     * van guardando en un archivo temporal para no tener todo el audio en memoria.
+     */
+    fun build(
+        count: Int,
+        sample: (Int) -> Audio,
+        programName: String,
+        tpl: DwpTemplate,
+        out: OutputStream,
+        opts: Options = Options(),
+        tempDir: File? = null,
+        onProgress: ((Int, Int) -> Unit)? = null,
     ): Result {
-        val regs = plan(samples.size)
+        val regs = plan(count)
         val n = regs.size
         val hdr = tpl.hdr.copyOf()
         ByteBuffer.wrap(hdr).order(ByteOrder.LITTLE_ENDIAN).putInt(26, n)
         val name = cleanName(programName)
         val progBytes = hdr + chunk(102, ascii(name)) + chunk(103, ascii("C:\\samples\\$name.dwp")) + tpl.rest
         var total = progBytes.size
-        val regionParts = ArrayList<ByteArray>()
         var loops = 0
-
-        for (k in 0 until n) {
-            val r = regs[k]
-            val audio = samples[k]
-            val div = opts.rateDiv
-            val rate = audio.rate.toDouble() / div
-            val rname = name + "_" + r.name + "_127"
-            val same = audio.channels.size < 2
-            // Escala de 16 bit (igual que el HTML): la normalizacion final es relativa a ella.
-            var vals = Array(if (same) 1 else 2) { c -> DoubleArray(audio.frames) { audio.channels[c][it] * 32768.0 } }
-            if (div > 1) vals = Array(vals.size) { decimate(vals[it], div) }
-            val T = vals[0].size
-            var peak = 0.0
-            for (c in vals.indices) for (i in 0 until T) { val a = abs(vals[c][i]); if (a > peak) peak = a }
-            if (peak < 1) peak = 1.0
-            val g = if (opts.keepLevels) 1.0 else 32767.0 / peak
-            val f = min(FADE, T shr 2)
-            fun ramp(i: Int, up: Boolean): Double =
-                if (f == 1) (if (up) 0.0 else 1.0)
-                else if (up) (if (i == f - 1) 1.0 else i * (1.0 / (f - 1)))
-                else (if (i == f - 1) 0.0 else 1.0 + i * (-1.0 / (f - 1)))
-            val xi = Array(vals.size) { c -> DoubleArray(T) { Math.rint(vals[c][it] * g) } }
-            val lp = if (opts.loop) findLoop(xi[0], rate) else null
-            for (c in xi.indices) {
-                for (i in 0 until f) xi[c][i] *= ramp(i, true)
-                if (lp == null) for (i in T - f until T) xi[c][i] *= ramp(i - (T - f), false)
-                for (i in 0 until T) xi[c][i] = truncate(max(-32768.0, min(32767.0, xi[c][i])))
-            }
-            val frames: Int
-            val pcm: ByteArray
-            var bits = 16
-            if (lp != null) {
-                loops++
-                bits = if (opts.loopBits32) 32 else 16
-                frames = T
-                val bps = bits / 8
-                val blockLen = GUARD + T + GUARD
-                pcm = ByteArray(blockLen * 2 * bps)
-                val fb = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN)
-                val ys = Array(xi.size) { crossfade(xi[it], lp) }
-                var ymax = 0.0
-                for (y in ys) for (i in 0 until T) { val a = abs(y[i]); if (a > ymax) ymax = a }
-                val gain = if (ymax > 32767) 32767.0 / ymax else 1.0
-                for (c in 0 until 2) {
-                    if (c == 1 && same) { System.arraycopy(pcm, 0, pcm, blockLen * bps, blockLen * bps); break }
-                    val y = ys[c]
-                    val base = c * blockLen * bps
-                    if (bits == 32) for (i in 0 until T) fb.putFloat(base + (GUARD + i) * 4, (y[i] * gain / 32768.0).toFloat())
-                    else for (i in 0 until T) fb.putShort(base + (GUARD + i) * 2, max(-32768.0, min(32767.0, Math.rint(y[i] * gain))).toInt().toShort())
-                }
-            } else {
-                frames = T + TAIL
-                val blockLen = GUARD + T + TAIL + GUARD
-                pcm = ByteArray(blockLen * 4)
-                val pb = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN)
-                for (c in 0 until 2) {
-                    if (c == 1 && same) { System.arraycopy(pcm, 0, pcm, blockLen * 2, blockLen * 2); break }
-                    for (i in 0 until T) pb.putShort(c * blockLen * 2 + (GUARD + i) * 2, xi[c][i].toInt().toShort())
-                }
-            }
-
-            val rpath = "C:\\samples\\$name\\$rname.wav"
-            val subs = ArrayList<ByteArray>()
-            var rsize = 0
-            for ((tag, stored) in tpl.region) {
-                val d: ByteArray = when (tag) {
-                    500 -> tpl.d500.copyOf().also { it[0] = r.note.toByte(); it[1] = r.lo.toByte(); it[2] = r.hi.toByte(); it[3] = 0; it[4] = 127 }
-                    501 -> ascii(rname)
-                    502 -> ascii(rpath)
-                    503 -> {
-                        val a = tpl.d503.copyOf()
-                        val v = ByteBuffer.wrap(a).order(ByteOrder.LITTLE_ENDIAN)
-                        v.putInt(0, frames); v.putFloat(16, rate.toFloat())
-                        if (lp != null) { v.putInt(20, 2); v.putInt(24, lp.start); v.putInt(28, lp.end) }
-                        v.putInt(36, bits)
-                        a
+        val tmp = File.createTempFile("dwp", ".tmp", tempDir)
+        try {
+            tmp.outputStream().buffered(1 shl 16).use { rout ->
+                for (k in 0 until n) {
+                    val r = regs[k]
+                    val audio = sample(k)
+                    val div = opts.rateDiv
+                    val rate = audio.rate.toDouble() / div
+                    val rname = name + "_" + r.name + "_127"
+                    val same = audio.channels.size < 2
+                    val xi = toInts(audio, div, opts.keepLevels)
+                    val T = xi[0].size
+                    val f = min(FADE, T shr 2)
+                    fun ramp(i: Int, up: Boolean): Double =
+                        if (f == 1) (if (up) 0.0 else 1.0)
+                        else if (up) (if (i == f - 1) 1.0 else i * (1.0 / (f - 1)))
+                        else (if (i == f - 1) 0.0 else 1.0 + i * (-1.0 / (f - 1)))
+                    val lp = if (opts.loop) findLoop(xi[0], rate) else null
+                    for (c in xi.indices) {
+                        for (i in 0 until f) xi[c][i] *= ramp(i, true)
+                        if (lp == null) for (i in T - f until T) xi[c][i] *= ramp(i - (T - f), false)
+                        for (i in 0 until T) xi[c][i] = truncate(max(-32768.0, min(32767.0, xi[c][i])))
                     }
-                    517 -> pcm
-                    else -> stored
+                    val frames: Int
+                    val pcm: ByteArray
+                    var bits = 16
+                    if (lp != null) {
+                        loops++
+                        bits = if (opts.loopBits32) 32 else 16
+                        frames = T
+                        val bps = bits / 8
+                        val blockLen = GUARD + T + GUARD
+                        pcm = ByteArray(blockLen * 2 * bps)
+                        val fb = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN)
+                        val ys = Array(xi.size) { crossfade(xi[it], lp) }
+                        var ymax = 0.0
+                        for (y in ys) for (i in 0 until T) { val a = abs(y[i]); if (a > ymax) ymax = a }
+                        val gain = if (ymax > 32767) 32767.0 / ymax else 1.0
+                        for (c in 0 until 2) {
+                            if (c == 1 && same) { System.arraycopy(pcm, 0, pcm, blockLen * bps, blockLen * bps); break }
+                            val y = ys[c]
+                            val base = c * blockLen * bps
+                            if (bits == 32) for (i in 0 until T) fb.putFloat(base + (GUARD + i) * 4, (y[i] * gain / 32768.0).toFloat())
+                            else for (i in 0 until T) fb.putShort(base + (GUARD + i) * 2, max(-32768.0, min(32767.0, Math.rint(y[i] * gain))).toInt().toShort())
+                        }
+                    } else {
+                        frames = T + TAIL
+                        val blockLen = GUARD + T + TAIL + GUARD
+                        pcm = ByteArray(blockLen * 4)
+                        val pb = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN)
+                        for (c in 0 until 2) {
+                            if (c == 1 && same) { System.arraycopy(pcm, 0, pcm, blockLen * 2, blockLen * 2); break }
+                            for (i in 0 until T) pb.putShort(c * blockLen * 2 + (GUARD + i) * 2, xi[c][i].toInt().toShort())
+                        }
+                    }
+
+                    val rpath = "C:\\samples\\$name\\$rname.wav"
+                    val subs = ArrayList<ByteArray>()
+                    var rsize = 0
+                    for ((tag, stored) in tpl.region) {
+                        val d: ByteArray = when (tag) {
+                            500 -> tpl.d500.copyOf().also { it[0] = r.note.toByte(); it[1] = r.lo.toByte(); it[2] = r.hi.toByte(); it[3] = 0; it[4] = 127 }
+                            501 -> ascii(rname)
+                            502 -> ascii(rpath)
+                            503 -> {
+                                val a = tpl.d503.copyOf()
+                                val v = ByteBuffer.wrap(a).order(ByteOrder.LITTLE_ENDIAN)
+                                v.putInt(0, frames); v.putFloat(16, rate.toFloat())
+                                if (lp != null) { v.putInt(20, 2); v.putInt(24, lp.start); v.putInt(28, lp.end) }
+                                v.putInt(36, bits)
+                                a
+                            }
+                            517 -> pcm
+                            else -> stored
+                        }
+                        subs.add(chunkHeader(tag, d.size)); subs.add(d)
+                        rsize += 12 + d.size
+                    }
+                    rout.write(chunkHeader(3, rsize))
+                    for (p in subs) rout.write(p)
+                    total += 12 + rsize
+                    onProgress?.invoke(k + 1, n)
                 }
-                subs.add(chunkHeader(tag, d.size)); subs.add(d)
-                rsize += 12 + d.size
             }
-            regionParts.add(chunkHeader(3, rsize))
-            regionParts.addAll(subs)
-            total += 12 + rsize
-            onProgress?.invoke(k + 1, n)
+            total += 12
+            out.write(tpl.prefix)
+            out.write(chunkHeader(1, total))
+            out.write(progBytes)
+            tmp.inputStream().buffered(1 shl 16).use { it.copyTo(out) }
+            out.write(chunkHeader(2, 0))
+            return Result(tpl.prefix.size + 12 + total, regs, name, loops)
+        } finally {
+            tmp.delete()
         }
-        total += 12
-        out.write(tpl.prefix)
-        out.write(chunkHeader(1, total))
-        out.write(progBytes)
-        var written = tpl.prefix.size + 12 + progBytes.size
-        for (p in regionParts) { out.write(p); written += p.size }
-        out.write(chunkHeader(2, 0))
-        written += 12
-        return Result(written, regs, name, loops)
     }
 }
