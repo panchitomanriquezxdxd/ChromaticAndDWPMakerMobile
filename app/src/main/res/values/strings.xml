@@ -48,4 +48,34 @@
         <item>Light · half the sample rate</item>
         <item>Minimal · a quarter of the sample rate</item>
     </string-array>
+    <string name="slicex_section">Audio with markers (Slicex)</string>
+    <string name="slicex_hint">Load a WAV with Slicex markers (or any WAV and place the markers here). Each marker opens a region that lasts until the next one. While a file is loaded, its regions are used instead of 1.wav, 2.wav… for both the chromatic scale and the DWP. Results are still saved in the sample folder.</string>
+    <string name="slicex_pick">Select a WAV file</string>
+    <string name="slicex_remove">Remove</string>
+    <string name="slicex_none">No audio file loaded.</string>
+    <string name="slicex_info">%1$s · %2$s s · %3$d Hz · %4$d markers</string>
+    <string name="slicex_wave_desc">Waveform with the markers. Tap to add a marker; tap an existing one to remove it.</string>
+    <string name="slicex_example">Example: each marker opens a region and each region gets one note.</string>
+    <string name="slicex_include_intro">Include the audio before the first marker (%1$s s) as one more region, with its own note.</string>
+    <string name="slicex_detect_label">Detect sounds</string>
+    <string name="slicex_detect">Detect</string>
+    <string name="slicex_equal_label">Split into equal parts</string>
+    <string name="slicex_equal">Split</string>
+    <string name="slicex_shift_label">Move all markers (milliseconds)</string>
+    <string name="slicex_before">◀ Before</string>
+    <string name="slicex_after">After ▶</string>
+    <string name="slicex_clear">Remove all</string>
+    <string name="slicex_restore">Restore the file\'s markers</string>
+    <string name="slicex_regions">%1$d regions, from %2$s to %3$s.</string>
+    <string name="slicex_no_markers">This audio has no markers: it becomes one single region. Add them above.</string>
+    <string name="status_slicex_loading">Reading the audio file…</string>
+    <string name="error_slicex_read">Could not read the file. Use a WAV file (PCM or float).</string>
+    <string name="error_file_too_big">The file is too large. Use a WAV of up to 60 MB.</string>
+    <string name="error_bad_parts">Choose between 2 and %1$d parts.</string>
+    <string name="error_bad_ms">Enter between 1 and 2000 ms.</string>
+    <string-array name="slicex_sensitivity_options">
+        <item>Sensitive (soft sounds)</item>
+        <item>Normal</item>
+        <item>Low (only loud hits)</item>
+    </string-array>
 </resources>

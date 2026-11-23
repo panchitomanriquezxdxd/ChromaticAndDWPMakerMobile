@@ -46,4 +46,34 @@
         <item>Leve · metade da taxa de amostragem</item>
         <item>Mínima · um quarto da taxa</item>
     </string-array>
+    <string name="slicex_section">Áudio com markers (Slicex)</string>
+    <string name="slicex_hint">Carregue um WAV com markers do Slicex (ou qualquer WAV e coloque os markers aqui). Cada marker abre uma região que dura até o próximo. Enquanto houver um arquivo carregado, as regiões dele são usadas no lugar de 1.wav, 2.wav… tanto na escala cromática quanto no DWP. Os resultados continuam sendo salvos na pasta de amostras.</string>
+    <string name="slicex_pick">Selecionar arquivo WAV</string>
+    <string name="slicex_remove">Remover</string>
+    <string name="slicex_none">Nenhum arquivo de áudio carregado.</string>
+    <string name="slicex_info">%1$s · %2$s s · %3$d Hz · %4$d markers</string>
+    <string name="slicex_wave_desc">Forma de onda com os markers. Toque para pôr um marker; toque em um existente para removê-lo.</string>
+    <string name="slicex_example">Exemplo: cada marker abre uma região e cada região fica em uma nota.</string>
+    <string name="slicex_include_intro">Incluir o áudio anterior ao primeiro marker (%1$s s) como mais uma região, com sua própria nota.</string>
+    <string name="slicex_detect_label">Detectar sons</string>
+    <string name="slicex_detect">Detectar</string>
+    <string name="slicex_equal_label">Dividir em partes iguais</string>
+    <string name="slicex_equal">Dividir</string>
+    <string name="slicex_shift_label">Mover todos os markers (milissegundos)</string>
+    <string name="slicex_before">◀ Antes</string>
+    <string name="slicex_after">Depois ▶</string>
+    <string name="slicex_clear">Remover todos</string>
+    <string name="slicex_restore">Restaurar os do arquivo</string>
+    <string name="slicex_regions">%1$d regiões, de %2$s a %3$s.</string>
+    <string name="slicex_no_markers">Este áudio não tem markers: vira uma única região. Adicione-os acima.</string>
+    <string name="status_slicex_loading">Lendo o arquivo de áudio…</string>
+    <string name="error_slicex_read">Não foi possível ler o arquivo. Use um WAV (PCM ou float).</string>
+    <string name="error_file_too_big">O arquivo é grande demais. Use um WAV de até 60 MB.</string>
+    <string name="error_bad_parts">Escolha entre 2 e %1$d partes.</string>
+    <string name="error_bad_ms">Informe entre 1 e 2000 ms.</string>
+    <string-array name="slicex_sensitivity_options">
+        <item>Sensível (sons suaves)</item>
+        <item>Normal</item>
+        <item>Pouco sensível (só batidas fortes)</item>
+    </string-array>
 </resources>

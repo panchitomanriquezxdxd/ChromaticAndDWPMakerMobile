@@ -15,6 +15,10 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
+
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++17"
@@ -40,16 +44,8 @@ android {
         }
     }
 
-    // Un APK por arquitectura (armeabi-v7a y arm64-v8a) y ademas un APK "universal"
-    // que contiene las dos, para instalarlo en cualquier telefono.
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a")
-            isUniversalApk = true
-        }
-    }
+    // Un solo APK universal: contiene armeabi-v7a (32 bit) y arm64-v8a (64 bit), asi que se instala
+    // en cualquier telefono. (Sin "splits": no se generan APK separados por arquitectura.)
 
     buildTypes {
         release {

@@ -40,7 +40,12 @@ object AudioPrep {
     /** Lee un WAV PCM (8/16/24/32 bit) o float (32/64 bit), mono o estereo (se usan hasta 2 canales). */
     fun readWav(file: File): Audio = parseWav(file.readBytes())
 
-    fun parseWav(bytes: ByteArray): Audio {
+    fun parseWav(bytes: ByteArray): Audio = parseWavWithMarkers(bytes).audio
+
+    /** Un WAV junto con los markers (chunk `cue `) que trae, como posiciones en muestras. */
+    class WavData(val audio: Audio, val markers: List<Int>)
+
+    fun parseWavWithMarkers(bytes: ByteArray): WavData {
         val bb = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         fun tag(o: Int) = String(bytes, o, 4, Charsets.US_ASCII)
         if (bytes.size < 44 || tag(0) != "RIFF" || tag(8) != "WAVE") throw IllegalArgumentException("Not a valid WAV file")
@@ -51,6 +56,7 @@ object AudioPrep {
         var bits = 0
         var dataOff = -1
         var dataLen = 0
+        val cues = ArrayList<Int>()
         while (pos + 8 <= bytes.size) {
             val id = tag(pos)
             var size = bb.getInt(pos + 4).toLong() and 0xffffffffL
@@ -66,6 +72,16 @@ object AudioPrep {
             } else if (id == "data") {
                 dataOff = body
                 dataLen = size.toInt()
+            } else if (id == "cue " && size >= 4) {
+                val count = bb.getInt(body)
+                var i = 0
+                while (i < count && 4 + (i + 1) * 24 <= size) {
+                    val p = body + 4 + i * 24
+                    val position = bb.getInt(p + 4)
+                    val sampleOffset = bb.getInt(p + 20)
+                    cues.add(if (sampleOffset != 0) sampleOffset else position)
+                    i++
+                }
             }
             pos = (body + size + (size and 1L)).toInt()
         }
@@ -95,7 +111,9 @@ object AudioPrep {
                 }
             }
         }
-        return Audio(rate, out)
+        val audio = Audio(rate, out)
+        val markers = cues.filter { it in 0 until frames }.distinct().sorted()
+        return WavData(audio, markers)
     }
 
     /** Escribe un WAV PCM de 24 bit (Praat lo lee sin perdida). */

@@ -7,11 +7,13 @@ import android.view.View
 import android.widget.ArrayAdapter
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.documentfile.provider.DocumentFile
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.bichoelproxd.chromaticscalegenerator.databinding.ActivityMainBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
+import java.util.Locale
 
 /** Pantalla principal: los mismos controles que la ventana de PC (app_ui.py). */
 class MainActivity : AppCompatActivity() {
@@ -22,6 +24,21 @@ class MainActivity : AppCompatActivity() {
 
     @Volatile
     private var busy = false
+
+    /** Audio cargado con sus markers (logica de Slicex). Si hay uno, sus regiones reemplazan a 1.wav, 2.wav... */
+    private class SlicexState(
+        val fileName: String,
+        val audio: Audio,
+        val original: List<Int>,
+        var markers: List<Int>,
+        var includeIntro: Boolean = false,
+    )
+
+    private var slicex: SlicexState? = null
+
+    private val pickAudio = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) loadSlicex(uri)
+    }
 
     private val pickFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) onFolderPicked(uri)
@@ -59,6 +76,34 @@ class MainActivity : AppCompatActivity() {
             this, android.R.layout.simple_spinner_dropdown_item, resources.getStringArray(R.array.dwp_quality_options)
         )
         binding.dwpQualityChoice.setSelection(1) // Estandar
+
+        binding.slicexSens.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item, resources.getStringArray(R.array.slicex_sensitivity_options)
+        )
+        binding.slicexSens.setSelection(1) // Normal
+        binding.slicexPick.setOnClickListener { pickAudio.launch(arrayOf("audio/*", "application/octet-stream")) }
+        binding.slicexRemove.setOnClickListener { unloadSlicex() }
+        binding.slicexDetect.setOnClickListener { slicexDetect() }
+        binding.slicexEqual.setOnClickListener { slicexEqual() }
+        binding.slicexBack.setOnClickListener { slicexNudge(-1) }
+        binding.slicexFwd.setOnClickListener { slicexNudge(1) }
+        binding.slicexClear.setOnClickListener { setSlicexMarkers(emptyList()) }
+        binding.slicexRestore.setOnClickListener { slicex?.let { setSlicexMarkers(it.original) } }
+        binding.slicexIntro.setOnCheckedChangeListener { _, checked ->
+            val st = slicex ?: return@setOnCheckedChangeListener
+            if (checked == st.includeIntro) return@setOnCheckedChangeListener
+            if (Slicex.bounds(st.markers, checked).size > DwpBuilder.MAX_REGIONS) {
+                binding.slicexIntro.isChecked = false
+                setStatus(getString(R.string.error_too_many_samples, Slicex.bounds(st.markers, checked).size, DwpBuilder.MAX_REGIONS))
+            } else {
+                st.includeIntro = checked
+                refreshSlicex()
+            }
+        }
+        binding.waveform.onTap = { frame, tol ->
+            val st = slicex
+            if (st != null && !busy) setSlicexMarkers(Slicex.toggle(st.audio, st.markers, frame, tol))
+        }
 
         binding.dirPicker.setOnClickListener { pickFolder.launch(treeUri) }
         binding.chromGenerate.setOnClickListener { generate() }
@@ -132,12 +177,147 @@ class MainActivity : AppCompatActivity() {
         busy = value
         binding.chromGenerate.isEnabled = !value
         binding.dwpCreate.isEnabled = !value
+        binding.slicexPick.isEnabled = !value
+        binding.slicexRemove.isEnabled = !value && slicex != null
         binding.dirPicker.isEnabled = !value
         binding.languageButton.isEnabled = !value
         binding.progressBar.visibility = if (value) View.VISIBLE else View.INVISIBLE
         if (value) {
             binding.progressBar.isIndeterminate = true
         }
+    }
+
+    // ------------------------------------------------------------------ Slicex
+
+    private fun loadSlicex(uri: Uri) {
+        if (busy) return
+        setStatus(getString(R.string.status_slicex_loading))
+        val name = DocumentFile.fromSingleUri(this, uri)?.name ?: uri.lastPathSegment ?: "audio.wav"
+        praatThread("slicex-load") {
+            try {
+                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: throw IllegalStateException(getString(R.string.error_slicex_read))
+                if (bytes.size > MAX_AUDIO_BYTES) throw IllegalStateException(getString(R.string.error_file_too_big))
+                val wav = try {
+                    AudioPrep.parseWavWithMarkers(bytes)
+                } catch (_: IllegalArgumentException) {
+                    throw IllegalStateException(getString(R.string.error_slicex_read))
+                }
+                val st = SlicexState(name, wav.audio, wav.markers, wav.markers)
+                runOnUiThread {
+                    slicex = st
+                    if (binding.dwpNameInput.text.toString() == DEFAULT_DWP_NAME) {
+                        binding.dwpNameInput.setText(DwpBuilder.cleanName(name))
+                    }
+                    binding.slicexPanel.visibility = View.VISIBLE
+                    binding.slicexRemove.isEnabled = true
+                    binding.slicexIntro.isChecked = false
+                    refreshSlicex()
+                    setStatus(getString(R.string.status_ready))
+                }
+            } catch (e: Throwable) {
+                val message = e.message ?: e.toString()
+                runOnUiThread { setStatus(getString(R.string.error_prefix, message)) }
+            }
+        }
+    }
+
+    private fun unloadSlicex() {
+        slicex = null
+        binding.slicexPanel.visibility = View.GONE
+        binding.slicexRemove.isEnabled = false
+        binding.slicexIntro.visibility = View.GONE
+        binding.slicexInfo.text = getString(R.string.slicex_none)
+        binding.slicexCaption.text = getString(R.string.slicex_example)
+        binding.waveform.setContent(null, emptyList())
+        setStatus(getString(R.string.status_ready))
+    }
+
+    /** Cambia los markers; si dejarian mas de 128 regiones, se ignora el cambio. */
+    private fun setSlicexMarkers(markers: List<Int>) {
+        val st = slicex ?: return
+        val clean = Slicex.clean(markers, st.audio.frames)
+        val count = Slicex.bounds(clean, st.includeIntro).size
+        if (count > DwpBuilder.MAX_REGIONS) {
+            setStatus(getString(R.string.error_too_many_samples, count, DwpBuilder.MAX_REGIONS))
+            return
+        }
+        st.markers = clean
+        refreshSlicex()
+    }
+
+    private fun refreshSlicex() {
+        val st = slicex ?: return
+        val a = st.audio
+        val bounds = Slicex.bounds(st.markers, st.includeIntro)
+        val plan = DwpBuilder.plan(bounds.size)
+        binding.waveform.setContent(a, bounds.mapIndexed { k, f -> WaveformView.Mark(f, plan[k].name) })
+        binding.slicexInfo.text = getString(
+            R.string.slicex_info, st.fileName, String.format(Locale.US, "%.3f", a.frames / a.rate.toDouble()), a.rate, st.markers.size
+        )
+        binding.slicexCaption.text = if (st.markers.isEmpty()) {
+            getString(R.string.slicex_no_markers)
+        } else {
+            getString(R.string.slicex_regions, plan.size, plan.first().name, plan.last().name)
+        }
+        val intro = Slicex.introFrames(st.markers)
+        if (intro > 0) {
+            binding.slicexIntro.visibility = View.VISIBLE
+            binding.slicexIntro.text = getString(
+                R.string.slicex_include_intro, String.format(Locale.US, "%.3f", intro / a.rate.toDouble())
+            )
+        } else {
+            binding.slicexIntro.visibility = View.GONE
+            if (st.includeIntro) { st.includeIntro = false; binding.slicexIntro.isChecked = false }
+        }
+        binding.slicexClear.isEnabled = st.markers.isNotEmpty()
+        binding.slicexRestore.isEnabled = st.markers != st.original
+    }
+
+    private fun slicexDetect() {
+        val st = slicex ?: return
+        val s = when (binding.slicexSens.selectedItemPosition) {
+            0 -> Slicex.Sensitivity.HIGH
+            2 -> Slicex.Sensitivity.LOW
+            else -> Slicex.Sensitivity.NORMAL
+        }
+        setSlicexMarkers(Slicex.detectAndSnap(st.audio, s))
+    }
+
+    private fun slicexEqual() {
+        val st = slicex ?: return
+        val n = binding.slicexParts.text.toString().trim().toIntOrNull()
+        if (n == null || n < 2 || n > DwpBuilder.MAX_REGIONS) {
+            setStatus(getString(R.string.error_bad_parts, DwpBuilder.MAX_REGIONS))
+            return
+        }
+        setSlicexMarkers(Slicex.equalMarkers(st.audio.frames, n))
+    }
+
+    private fun slicexNudge(direction: Int) {
+        val st = slicex ?: return
+        val ms = binding.slicexMs.text.toString().trim().toDoubleOrNull()
+        if (ms == null || ms < 1 || ms > 2000) {
+            setStatus(getString(R.string.error_bad_ms))
+            return
+        }
+        val delta = Math.round(st.audio.rate * ms / 1000).toInt() * direction
+        setSlicexMarkers(Slicex.shift(st.markers, delta, st.audio.frames))
+    }
+
+    /** Regiones del audio cargado (una muestra por region), o null si se usan los 1.wav, 2.wav... */
+    private fun slicexSlices(): List<Audio>? {
+        val st = slicex ?: return null
+        return Slicex.slices(st.audio, st.markers, st.includeIntro)
+    }
+
+    /** Deja las muestras en [sampleDir]: las regiones del audio cargado o la copia de la carpeta. */
+    private fun stageSamples(folder: SampleFolder, sampleDir: File, slices: List<Audio>?): Int {
+        if (slices == null) return folder.copySamplesTo(sampleDir)
+        sampleDir.deleteRecursively()
+        sampleDir.mkdirs()
+        slices.forEachIndexed { i, a -> AudioPrep.writeWav(File(sampleDir, "${i + 1}.wav"), a) }
+        return slices.size
     }
 
     private fun generate() {
@@ -171,6 +351,7 @@ class MainActivity : AppCompatActivity() {
 
         val trimmed = binding.trimCheck.isChecked
         val normalized = binding.normalizeCheck.isChecked
+        val slices = try { slicexSlices() } catch (e: IllegalArgumentException) { setStatus(getString(R.string.error_prefix, e.message ?: "")); return }
 
         setBusy(true)
         setStatus(getString(R.string.status_copying))
@@ -188,7 +369,7 @@ class MainActivity : AppCompatActivity() {
                 outputDir.deleteRecursively()
                 outputDir.mkdirs()
 
-                if (folder.copySamplesTo(sampleDir) == 0) {
+                if (stageSamples(folder, sampleDir, slices) == 0) {
                     throw IllegalStateException(getString(R.string.error_no_samples))
                 }
 
@@ -250,6 +431,7 @@ class MainActivity : AppCompatActivity() {
             loopBits32 = quality == 0,
             keepLevels = normalized,
         )
+        val slices = try { slicexSlices() } catch (e: IllegalArgumentException) { setStatus(getString(R.string.error_prefix, e.message ?: "")); return }
 
         setBusy(true)
         setStatus(getString(R.string.status_copying))
@@ -268,7 +450,7 @@ class MainActivity : AppCompatActivity() {
                 outputDir.deleteRecursively()
                 outputDir.mkdirs()
 
-                if (folder.copySamplesTo(sampleDir) == 0) {
+                if (stageSamples(folder, sampleDir, slices) == 0) {
                     throw IllegalStateException(getString(R.string.error_no_samples))
                 }
                 val files = AudioPrep.listNumbered(sampleDir)
@@ -329,6 +511,8 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val PRAAT_STACK_BYTES = 16L * 1024 * 1024
         private const val PREF_TREE_URI = "tree_uri"
+        private const val MAX_AUDIO_BYTES = 60 * 1024 * 1024
+        private const val DEFAULT_DWP_NAME = "Program"
         private val NOTES = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
         private val OCTAVES = listOf("2", "3", "4")
     }

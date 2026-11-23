@@ -17,6 +17,12 @@ first time it opens, and the **Language** button at the top lets you change it a
   loop with crossfade on sustained sounds, and four quality levels. It does not need Praat. The `.dwp` is saved in the
   chosen folder. The core (`DwpBuilder.kt`) was checked byte for byte against the HTML's JavaScript.
 
+- **Slicex**: load a WAV with Slicex markers (or any WAV) and its regions replace `1.wav`, `2.wav`, … for both the
+  chromatic scale and the DWP. Each marker opens a region until the next one. Tap the waveform to add or remove a
+  marker, detect sounds automatically (3 sensitivities), split into equal parts, move all markers by some
+  milliseconds, include the audio before the first marker, or restore the file's markers. Detection, splitting and
+  snapping to the quietest point give the same results as `DWP Converter.html`. WAV files only (PCM or float, up to 60 MB).
+
 Auto-trim and normalization apply both to the chromatic scale and to the DWP.
 
 ## How the port works
@@ -39,18 +45,15 @@ The app copies the samples from the chosen folder into its private storage, proc
 ## Building the APK
 
 GitHub Actions does it (`.github/workflows/build.yml`): on every push to `main`/`master`, on every pull request, or
-manually from **Actions → Build APK → Run workflow**. It produces three APKs in the `ChromaticScaleGenerator-apk`
-artifact:
+manually from **Actions → Build APK → Run workflow**. It produces a single **universal APK**,
+`ChromaticScaleGenerator-universal.apk` (`armeabi-v7a` + `arm64-v8a`, so it works on any phone), in the
+`ChromaticScaleGenerator-universal-apk` artifact.
 
-- `app-universal-release.apk`: `armeabi-v7a` + `arm64-v8a` (works on any phone)
-- `app-arm64-v8a-release.apk`: 64-bit only
-- `app-armeabi-v7a-release.apk`: 32-bit only
-
-Pushing a `v*` tag (for example `v1.0`) also publishes a Release with the APKs.
+Pushing a `v*` tag (for example `v1.0`) also publishes a Release with the APK.
 The first build takes a while (it compiles all of Praat); later ones use `ccache`.
 
 Locally: `scripts/fetch_praat.sh && ./gradlew assembleRelease` (needs JDK 17, the Android SDK and NDK 27.2.12479018).
-The APKs are signed with the debug key, so they can be installed directly (they are not suitable for Google Play).
+The APK is signed with the debug key, so they can be installed directly (it is not suitable for Google Play).
 
 ## Testing the core on a PC
 

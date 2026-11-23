@@ -2,13 +2,11 @@ name: Build APK
 
 # Compila el APK de Android (armeabi-v7a y arm64-v8a) con el motor de Praat del codigo fuente de Parselmouth.
 #
-# Genera 3 APK:
-#   - app-universal-release.apk     -> contiene armeabi-v7a y arm64-v8a (sirve en cualquier telefono)
-#   - app-arm64-v8a-release.apk     -> solo telefonos de 64 bits (la mayoria de los actuales)
-#   - app-armeabi-v7a-release.apk   -> solo telefonos de 32 bits
+# Genera un solo APK universal: ChromaticScaleGenerator-universal.apk, con armeabi-v7a y arm64-v8a
+# (sirve en cualquier telefono).
 #
 # Se ejecuta en cada push a main/master, en pull requests, a mano (Actions > Build APK > Run workflow)
-# y al subir una etiqueta v* (por ejemplo v1.0), que ademas publica un Release con los APK.
+# y al subir una etiqueta v* (por ejemplo v1.0), que ademas publica un Release con el APK.
 
 on:
   push:
@@ -84,29 +82,26 @@ jobs:
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Compilar el APK (release)
+      - name: Compilar el APK universal (release)
         run: ./gradlew --no-daemon assembleRelease -PuseCcache --stacktrace
 
-      - name: Comprobar que los APK contienen las dos arquitecturas
+      - name: Comprobar el APK universal
         run: |
           set -euo pipefail
           ls -lh app/build/outputs/apk/release/
-          check() { # check <apk> <abi...>
-            local apk="$1"; shift
-            for abi in "$@"; do
-              unzip -l "$apk" | grep -q "lib/${abi}/libchromaticpraat.so" \
-                || { echo "::error::Falta lib/${abi}/libchromaticpraat.so en ${apk}"; exit 1; }
-            done
-          }
-          check app/build/outputs/apk/release/app-universal-release.apk armeabi-v7a arm64-v8a
-          check app/build/outputs/apk/release/app-arm64-v8a-release.apk arm64-v8a
-          check app/build/outputs/apk/release/app-armeabi-v7a-release.apk armeabi-v7a
-          echo "OK: los APK contienen libchromaticpraat.so para armeabi-v7a y arm64-v8a"
+          APK=app/build/outputs/apk/release/app-release.apk
+          [ -f "$APK" ] || { echo "::error::No se genero $APK"; exit 1; }
+          for abi in armeabi-v7a arm64-v8a; do
+            unzip -l "$APK" | grep -q "lib/${abi}/libchromaticpraat.so" \
+              || { echo "::error::Falta lib/${abi}/libchromaticpraat.so en ${APK}"; exit 1; }
+          done
+          mv "$APK" app/build/outputs/apk/release/ChromaticScaleGenerator-universal.apk
+          echo "OK: APK universal con libchromaticpraat.so para armeabi-v7a y arm64-v8a"
 
       - name: Resumen
         run: |
           {
-            echo "## APK generados"
+            echo "## APK universal"
             echo
             echo '| Archivo | Tamano |'
             echo '| --- | --- |'
@@ -118,7 +113,7 @@ jobs:
       - name: Subir los APK como artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: ChromaticScaleGenerator-apk
+          name: ChromaticScaleGenerator-universal-apk
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
