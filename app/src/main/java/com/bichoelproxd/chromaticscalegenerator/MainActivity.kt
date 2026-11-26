@@ -107,6 +107,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.dirPicker.setOnClickListener { pickFolder.launch(treeUri) }
         binding.chromGenerate.setOnClickListener { generate() }
+        binding.chromGenerateMarkers.setOnClickListener { generate(withMarkers = true) }
         binding.dwpCreate.setOnClickListener { createDwp() }
         binding.pitchedCheck.setOnCheckedChangeListener { _, checked ->
             // Igual que en PC: las muestras con tono solo se guardan si "Pitched" esta activado.
@@ -176,6 +177,7 @@ class MainActivity : AppCompatActivity() {
     private fun setBusy(value: Boolean) {
         busy = value
         binding.chromGenerate.isEnabled = !value
+        binding.chromGenerateMarkers.isEnabled = !value
         binding.dwpCreate.isEnabled = !value
         binding.slicexPick.isEnabled = !value
         binding.slicexRemove.isEnabled = !value && slicex != null
@@ -329,7 +331,11 @@ class MainActivity : AppCompatActivity() {
     private fun errorText(e: Throwable): String =
         if (e is OutOfMemoryError) getString(R.string.error_out_of_memory) else (e.message ?: e.toString())
 
-    private fun generate() {
+    /**
+     * Genera chromatic.wav. Con [withMarkers] el resultado se guarda como chromatic_markers.wav y trae un
+     * marker (chunk cue) al comienzo de cada nota, para abrirlo en Slicex con una region por nota.
+     */
+    private fun generate(withMarkers: Boolean = false) {
         if (busy) return
 
         val uri = treeUri
@@ -387,7 +393,7 @@ class MainActivity : AppCompatActivity() {
                     AudioPrep.prepareFolder(sampleDir, trimmed, normalized)
                 }
 
-                ChromaticGenerator.generate(applicationContext, params, sampleDir, outputDir) { done, total ->
+                val noteStarts = ChromaticGenerator.generate(applicationContext, params, sampleDir, outputDir) { done, total ->
                     runOnUiThread {
                         if (total > 0) {
                             binding.progressBar.isIndeterminate = false
@@ -398,12 +404,29 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
+                if (withMarkers) {
+                    // Los markers van en el WAV como chunk cue, que es lo que lee Slicex.
+                    val chromatic = File(outputDir, "chromatic.wav")
+                    val frames = AudioPrep.readWav(chromatic).frames
+                    val markers = noteStarts.filter { it in 0 until frames }
+                    if (markers.isEmpty()) throw IllegalStateException(getString(R.string.error_no_markers))
+                    AudioPrep.addCueMarkers(chromatic, markers)
+                    if (!chromatic.renameTo(File(outputDir, SampleFolder.MARKERS_FILE))) {
+                        throw IllegalStateException(getString(R.string.error_no_markers))
+                    }
+                }
+
                 runOnUiThread { setStatus(getString(R.string.status_saving)) }
                 folder.copyResultsFrom(outputDir)
 
-                val doneText = if (params.dumpSamples) R.string.status_done_pitched else R.string.status_done
                 runOnUiThread {
-                    setStatus(getString(doneText))
+                    setStatus(
+                        when {
+                            withMarkers -> getString(R.string.status_done_markers, noteStarts.size)
+                            params.dumpSamples -> getString(R.string.status_done_pitched)
+                            else -> getString(R.string.status_done)
+                        }
+                    )
                     setBusy(false)
                 }
             } catch (e: Throwable) {

@@ -12,6 +12,9 @@
 #   gapSeconds   separacion entre muestras, en segundos
 #   pitched      1 = ajustar el tono de cada muestra, 0 = usar las muestras tal cual
 #   dumpSamples  1 = guardar tambien cada muestra con su tono en pitched_samples/
+#
+# Ademas de PROGRESS/SAVED, escribe una linea "MARKER <muestra>" por cada nota con la posicion (en muestras)
+# donde empieza dentro de chromatic.wav. La app la usa para escribir los markers (chunk cue) para Slicex.
 
 samplingRate = 48000
 
@@ -30,6 +33,9 @@ endif
 # Silencio entre muestras
 Create Sound from formula: "Gap", 1, 0, gapSeconds, samplingRate, "0"
 gapSound = selected ("Sound")
+gapSamples = Get number of samples
+# Posicion (en muestras) donde empieza la nota actual dentro de chromatic.wav
+cursor = 0
 
 for i from 0 to semitones - 1
 	appendInfoLine: "PROGRESS ", i, " ", semitones
@@ -64,6 +70,12 @@ for i from 0 to semitones - 1
 	else
 		noteSound [i + 1] = monoSound
 	endif
+
+	# Posicion de esta nota dentro de chromatic.wav (Concatenate suma las muestras tal cual)
+	selectObject: noteSound [i + 1]
+	noteSamples = Get number of samples
+	appendInfoLine: "MARKER ", cursor
+	cursor += noteSamples + gapSamples
 
 	# Un silencio despues de cada muestra. Se crea justo despues de la nota porque Concatenate
 	# toma los sonidos en el orden de la lista de objetos.

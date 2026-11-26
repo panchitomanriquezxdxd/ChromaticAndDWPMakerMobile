@@ -132,6 +132,39 @@ object AudioPrep {
         file.writeBytes(bb.array())
     }
 
+    /**
+     * Agrega al WAV [file] un chunk `cue ` con un marker en cada posicion de [markers] (en muestras),
+     * que es donde Slicex (y [parseWavWithMarkers]) los lee. El audio no se toca: el chunk va al final
+     * y se corrige el tamano del RIFF.
+     */
+    fun addCueMarkers(file: File, markers: List<Int>) {
+        val points = markers.distinct().sorted()
+        if (points.isEmpty()) return
+        val chunk = ByteBuffer.allocate(8 + 4 + 24 * points.size).order(ByteOrder.LITTLE_ENDIAN)
+        chunk.put("cue ".toByteArray()).putInt(4 + 24 * points.size).putInt(points.size)
+        points.forEachIndexed { i, at ->
+            chunk.putInt(i + 1)                 // id del punto
+            chunk.putInt(at)                    // posicion
+            chunk.put("data".toByteArray())     // el punto esta en el chunk de datos
+            chunk.putInt(0).putInt(0)           // chunk start / block start
+            chunk.putInt(at)                    // desplazamiento en muestras
+        }
+        java.io.RandomAccessFile(file, "rw").use { raf ->
+            val head = ByteArray(12)
+            raf.readFully(head)
+            if (String(head, 0, 4, Charsets.US_ASCII) != "RIFF" || String(head, 8, 4, Charsets.US_ASCII) != "WAVE") {
+                throw IllegalArgumentException("Not a valid WAV file")
+            }
+            var end = raf.length()
+            if (end and 1L == 1L) { raf.seek(end); raf.write(0); end++ }   // los chunks van alineados a 2 bytes
+            raf.seek(end)
+            raf.write(chunk.array())
+            val riffSize = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt((end + chunk.capacity() - 8).toInt())
+            raf.seek(4)
+            raf.write(riffSize.array())
+        }
+    }
+
     // --------------------------------------------------------- recorte
 
     /**

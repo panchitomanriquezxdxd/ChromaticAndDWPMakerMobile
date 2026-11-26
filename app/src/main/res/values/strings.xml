@@ -79,4 +79,7 @@
         <item>Low (only loud hits)</item>
     </string-array>
     <string name="error_out_of_memory">The device ran out of memory with this audio. Use a shorter or lower-quality file, or remove it and use the sample folder.</string>
+    <string name="generate_markers">Generate Chromatic With Markers</string>
+    <string name="error_no_markers">Could not place the markers in the chromatic scale.</string>
+    <string name="status_done_markers">Done. chromatic_markers.wav was saved in the selected folder with %1$d markers (one per note). Open it in Slicex.</string>
 </resources>

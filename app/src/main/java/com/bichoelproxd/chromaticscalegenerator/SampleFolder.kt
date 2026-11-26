@@ -41,12 +41,14 @@ class SampleFolder(private val context: Context, treeUri: Uri) {
     }
 
     /**
-     * Copia chromatic.wav y pitched_samples/ desde [source] a la carpeta elegida,
+     * Copia chromatic.wav (o chromatic_markers.wav) y pitched_samples/ desde [source] a la carpeta elegida,
      * reemplazando los archivos que ya existan.
      */
     fun copyResultsFrom(source: File) {
         val chromatic = File(source, "chromatic.wav")
         if (chromatic.isFile) writeFile(tree, "chromatic.wav", chromatic)
+        val withMarkers = File(source, MARKERS_FILE)
+        if (withMarkers.isFile) writeFile(tree, MARKERS_FILE, withMarkers)
 
         val pitchedDir = File(source, "pitched_samples")
         if (pitchedDir.isDirectory) {
@@ -76,6 +78,8 @@ class SampleFolder(private val context: Context, treeUri: Uri) {
     }
 
     companion object {
+        /** chromatic.wav con markers (chunk cue) para Slicex. */
+        const val MARKERS_FILE = "chromatic_markers.wav"
         private val SAMPLE_NAME = Regex("^[0-9]+\\.[wW][aA][vV]$")
     }
 }

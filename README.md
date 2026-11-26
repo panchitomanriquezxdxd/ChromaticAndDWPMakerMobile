@@ -23,6 +23,11 @@ first time it opens, and the **Language** button at the top lets you change it a
   milliseconds, include the audio before the first marker, or restore the file's markers. Detection, splitting and
   snapping to the quietest point give the same results as `DWP Converter.html`. WAV files only (PCM or float, up to 60 MB).
 
+- **Generate Chromatic With Markers** (*Generar Chromatic Con Markers*): same chromatic scale, but saved as
+  `chromatic_markers.wav` with a marker (WAV `cue ` chunk) at the start of every note, so you can open it in Slicex
+  and get one region per note. The marker positions come from the Praat script itself (`MARKER <sample>` lines), so
+  they match the audio exactly, including the gaps. The plain `chromatic.wav` button is unchanged.
+
 Auto-trim and normalization apply both to the chromatic scale and to the DWP.
 
 ## How the port works

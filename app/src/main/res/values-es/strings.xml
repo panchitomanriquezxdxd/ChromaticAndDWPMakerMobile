@@ -77,4 +77,7 @@
         <item>Poco sensible (solo golpes fuertes)</item>
     </string-array>
     <string name="error_out_of_memory">Al dispositivo se le acabó la memoria con este audio. Usa un archivo más corto o de menor calidad, o quítalo y usa la carpeta de muestras.</string>
+    <string name="generate_markers">Generar Chromatic Con Markers</string>
+    <string name="error_no_markers">No se pudieron colocar los markers en la escala cromática.</string>
+    <string name="status_done_markers">Listo. chromatic_markers.wav se guardó en la carpeta seleccionada con %1$d markers (uno por nota). Ábrelo en Slicex.</string>
 </resources>

@@ -56,6 +56,8 @@ object ChromaticGenerator {
      * escriben en [outputDir] (chromatic.wav y pitched_samples/pitched_N.wav).
      *
      * [onProgress] recibe (hechas, total). Debe llamarse desde un hilo de fondo.
+     *
+     * Devuelve la posicion (en muestras de chromatic.wav) donde empieza cada nota, en orden.
      */
     fun generate(
         context: Context,
@@ -63,7 +65,8 @@ object ChromaticGenerator {
         sampleDir: File,
         outputDir: File,
         onProgress: (done: Int, total: Int) -> Unit,
-    ) {
+    ): List<Int> {
+        val noteStarts = ArrayList<Int>()
         val script = buildScript(context, params, sampleDir, outputDir)
         val lineBuffer = StringBuilder()
         PraatBridge.runScript(context, script, object : PraatBridge.InfoListener {
@@ -76,9 +79,17 @@ object ChromaticGenerator {
                     val line = lineBuffer.substring(0, newline).trim()
                     lineBuffer.delete(0, newline + 1)
                     parseProgress(line)?.let { (done, total) -> onProgress(done, total) }
+                    parseMarker(line)?.let { noteStarts.add(it) }
                 }
             }
         })
+        return noteStarts
+    }
+
+    /** Linea "MARKER <muestra>" del script: donde empieza una nota dentro de chromatic.wav. */
+    private fun parseMarker(line: String): Int? {
+        if (!line.startsWith("MARKER ")) return null
+        return line.removePrefix("MARKER ").trim().toDoubleOrNull()?.toLong()?.takeIf { it in 0..Int.MAX_VALUE }?.toInt()
     }
 
     private fun parseProgress(line: String): Pair<Int, Int>? {
